@@ -1,0 +1,425 @@
+# iOS Coin Identifier App - Cursor Rules
+
+## Project Overview
+This is an iOS app that identifies coins through camera photos and displays coin information. The app uses MVVM architecture with no user registration or authentication required.
+
+## Architecture: MVVM (Model-View-ViewModel)
+
+### Project Structure
+```
+iOS/
+├── CoinIdentifier/
+│   ├── App/
+│   │   ├── CoinIdentifierApp.swift
+│   │   └── AppDelegate.swift
+│   ├── Models/
+│   │   ├── Coin.swift
+│   │   ├── CoinIdentificationResult.swift
+│   │   └── APIResponse.swift
+│   ├── Views/
+│   │   ├── Main/
+│   │   │   ├── CameraView.swift
+│   │   │   ├── AnalysisView.swift
+│   │   │   └── ResultView.swift
+│   │   ├── Components/
+│   │   │   ├── LoadingAnimation.swift
+│   │   │   ├── CameraButton.swift
+│   │   │   └── CoinInfoCard.swift
+│   │   └── Extensions/
+│   │       ├── View+Extensions.swift
+│   │       └── Image+Extensions.swift
+│   ├── ViewModels/
+│   │   ├── CameraViewModel.swift
+│   │   ├── AnalysisViewModel.swift
+│   │   └── ResultViewModel.swift
+│   ├── Services/
+│   │   ├── CoinIdentificationService.swift
+│   │   ├── CameraService.swift
+│   │   └── NetworkService.swift
+│   ├── Utils/
+│   │   ├── Constants.swift
+│   │   ├── ImageProcessor.swift
+│   │   └── ErrorHandler.swift
+│   └── Resources/
+│       ├── Assets.xcassets/
+│       ├── Info.plist
+│       └── Localizable.strings
+```
+
+## Coding Standards
+
+### Swift Style Guide
+- Use Swift 5.9+ features
+- Follow Apple's Swift API Design Guidelines
+- Use meaningful variable and function names
+- Prefer `let` over `var` when possible
+- Use type inference when the type is obvious
+- Use trailing closures for better readability
+
+### MVVM Implementation Rules
+
+#### Models
+- Keep models simple and focused on data representation
+- Use `Codable` for API responses
+- Include computed properties for derived data
+- Use enums for state management
+
+```swift
+// Example Model Structure
+struct Coin: Codable, Identifiable {
+    let id: String
+    let name: String
+    let year: Int
+    let country: String
+    let denomination: String
+    let composition: String
+    let description: String
+    let imageURL: String?
+    
+    var displayName: String {
+        "\(year) \(country) \(denomination)"
+    }
+}
+```
+
+#### ViewModels
+- Use `@Published` properties for reactive updates
+- Implement `ObservableObject` protocol
+- Handle async operations with proper error handling
+- Use `@MainActor` for UI updates
+- Keep business logic separate from UI logic
+
+```swift
+// Example ViewModel Structure
+@MainActor
+class CameraViewModel: ObservableObject {
+    @Published var isCameraActive = false
+    @Published var capturedImage: UIImage?
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    private let cameraService: CameraService
+    private let identificationService: CoinIdentificationService
+    
+    // ... implementation
+}
+```
+
+#### Views
+- Use SwiftUI for all UI components
+- Keep views simple and focused on presentation
+- Use `@StateObject` for ViewModels
+- Use `@ObservedObject` for child ViewModels
+- Implement proper accessibility
+
+```swift
+// Example View Structure
+struct CameraView: View {
+    @StateObject private var viewModel = CameraViewModel()
+    
+    var body: some View {
+        ZStack {
+            // Camera preview
+            CameraPreviewView(viewModel: viewModel)
+            
+            // Overlay controls
+            VStack {
+                Spacer()
+                CameraButton(action: viewModel.capturePhoto)
+            }
+        }
+        .alert("Error", isPresented: $viewModel.showError) {
+            Button("OK") { }
+        } message: {
+            Text(viewModel.errorMessage ?? "Unknown error")
+        }
+    }
+}
+```
+
+### Services Layer
+- Implement protocol-based services for testability
+- Use async/await for network calls
+- Handle errors gracefully
+- Implement proper retry logic
+
+```swift
+// Example Service Protocol
+protocol CoinIdentificationServiceProtocol {
+    func identifyCoin(image: UIImage) async throws -> CoinIdentificationResult
+}
+
+class CoinIdentificationService: CoinIdentificationServiceProtocol {
+    private let networkService: NetworkService
+    
+    func identifyCoin(image: UIImage) async throws -> CoinIdentificationResult {
+        // Implementation
+    }
+}
+```
+
+## UI/UX Guidelines
+
+### Design Principles
+- Clean, minimal interface
+- Intuitive camera controls
+- Smooth animations for loading states
+- Clear error messaging
+- Accessible design
+
+### Color Scheme
+**MANDATORY COLOR PALETTE RULE**: Always use these exact colors throughout the entire app - no exceptions:
+
+**Required Colors:**
+- Primary Gold: `#F5C242` (for primary buttons, highlights, and key UI elements)
+- Dark Gold: `#F8B500` (for secondary buttons, borders, and emphasis)
+- Light Gold: `#FCEABB` (for backgrounds, cards, and subtle highlights)
+- Pure White: `#FFFFFF` (for text on dark backgrounds, clean surfaces, and contrast)
+
+**Color Usage Rules:**
+- **ALWAYS** use `#F5C242` for primary actions, important buttons, and key interactive elements
+- **ALWAYS** use `#FCEABB` for card backgrounds, subtle highlights, and secondary backgrounds
+- **ALWAYS** use `#F8B500` for secondary buttons, borders, and when you need stronger emphasis than light gold
+- **ALWAYS** use `#FFFFFF` for text on dark backgrounds, clean surfaces, and maximum contrast
+- **NEVER** use any other colors outside this palette
+- Ensure proper contrast ratios for accessibility
+- Consider dark mode adaptations where these colors may need adjustment
+
+**SwiftUI Color Extension Example:**
+```swift
+extension Color {
+    static let primaryGold = Color(hex: "F5C242")
+    static let darkGold = Color(hex: "F8B500")
+    static let lightGold = Color(hex: "FCEABB")
+    static let pureWhite = Color(hex: "FFFFFF")
+}
+```
+
+### Typography
+- Use system fonts (SF Pro)
+- Headings: Large Title, Title, Headline
+- Body: Body, Callout
+- Captions: Caption, Footnote
+
+### Animations
+- Use SwiftUI animations for smooth transitions
+- Implement loading spinners for analysis
+- Add haptic feedback for button presses
+- Use spring animations for natural feel
+
+## Camera Implementation
+
+### Camera Features
+- Real-time camera preview
+- Photo capture functionality
+- Flash control (auto/on/off)
+- Focus and exposure controls
+- Image quality optimization
+
+### Camera Permissions
+- Request camera permission on first use
+- Handle permission denied gracefully
+- Provide clear instructions for enabling permissions
+
+## Network Layer
+
+### API Integration
+- Use URLSession for network requests
+- Implement proper error handling
+- Add request/response logging
+- Handle network connectivity issues
+- Implement request timeout
+
+### Image Processing
+- Compress images before upload
+- Support multiple image formats
+- Implement image validation
+- Add progress tracking for uploads
+
+## Error Handling
+
+### Error Types
+- Network errors
+- Camera permission errors
+- Image processing errors
+- API response errors
+- General app errors
+
+### Error Presentation
+- User-friendly error messages
+- Retry options where appropriate
+- Fallback behaviors
+- Proper error logging
+
+## Testing Guidelines
+
+### Unit Tests
+- Test ViewModels in isolation
+- Mock services for testing
+- Test error scenarios
+- Verify state changes
+
+### UI Tests
+- Test camera functionality
+- Test navigation flows
+- Test error handling
+- Test accessibility
+
+## Performance Guidelines
+
+### Image Processing
+- Optimize image size before upload
+- Use background processing for heavy operations
+- Implement proper memory management
+- Cache processed images when appropriate
+
+### Memory Management
+- Release camera resources properly
+- Handle large images efficiently
+- Implement proper cleanup in deinit
+- Monitor memory usage
+
+## Accessibility
+
+### VoiceOver Support
+- Provide meaningful labels
+- Implement proper navigation
+- Add descriptive hints
+- Test with VoiceOver enabled
+
+### Dynamic Type
+- Support all text size categories
+- Use relative sizing
+- Test with large text sizes
+
+## Security
+
+### Data Protection
+- Secure API communication (HTTPS)
+- Validate all user inputs
+- Implement proper error handling
+- Don't log sensitive information
+
+### Privacy
+- Request minimal permissions
+- Handle user data responsibly
+- Provide clear privacy information
+- Implement proper data deletion
+
+## Build Configuration
+
+### Target Configuration
+- iOS 15.0+ minimum deployment
+- iPhone and iPad support
+- Portrait and landscape orientations
+- Dark mode support
+
+### Dependencies
+- Use Swift Package Manager
+- Minimize third-party dependencies
+- Keep dependencies up to date
+- Document dependency purposes
+
+## Code Organization
+
+### File Naming
+- Use descriptive file names
+- Group related files together
+- Use consistent naming conventions
+- Separate concerns properly
+
+### Comments and Documentation
+- Document complex business logic
+- Add inline comments for clarity
+- Use Swift documentation comments
+- Keep documentation up to date
+
+## Git Workflow
+
+### Commit Messages
+- Use descriptive commit messages
+- Reference issue numbers
+- Keep commits focused and atomic
+- Use conventional commit format
+
+### Branch Strategy
+- Use feature branches
+- Create pull requests for review
+- Keep main branch stable
+- Delete merged branches
+
+## Development Workflow
+
+### Code Review
+- Review all code changes
+- Check for MVVM compliance
+- Verify error handling
+- Test edge cases
+
+### Testing
+- Write tests for new features
+- Maintain test coverage
+- Test on different devices
+- Verify accessibility
+
+## Deployment
+
+### App Store Preparation
+- Optimize app size
+- Test on multiple devices
+- Prepare app store assets
+- Review app store guidelines
+
+### Release Notes
+- Document new features
+- List bug fixes
+- Note breaking changes
+- Provide user instructions
+
+## Maintenance
+
+### Code Quality
+- Regular code reviews
+- Refactor when needed
+- Update dependencies
+- Monitor performance
+
+### User Feedback
+- Monitor crash reports
+- Collect user feedback
+- Address reported issues
+- Plan feature improvements
+
+## Additional Notes
+
+### Third-Party Libraries
+- Minimize external dependencies
+- Prefer Apple's native frameworks
+- Document why external libraries are needed
+- Keep libraries updated
+
+### Future Considerations
+- Plan for scalability
+- Consider offline functionality
+- Plan for internationalization
+- Consider advanced features (AR, ML)
+
+---
+
+## Quick Reference Commands
+
+### Common Tasks
+- Create new ViewModel: Follow MVVM pattern with @Published properties
+- Add new View: Use SwiftUI with @StateObject for ViewModels
+- Implement service: Use protocol-based approach with async/await
+- Handle errors: Use proper error types and user-friendly messages
+- Test code: Write unit tests for ViewModels and UI tests for Views
+
+### Code Snippets
+- Camera permission request
+- Image upload with progress
+- Loading animation implementation
+- Error alert presentation
+- Network request with retry logic
+
+Remember: Always prioritize user experience, maintain clean architecture, and write testable code! 
