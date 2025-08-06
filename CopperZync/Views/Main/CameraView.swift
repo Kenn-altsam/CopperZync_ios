@@ -5,6 +5,7 @@ struct CameraView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel = CameraViewModel()
     @State private var showFullScreenPhoto = false
+    @State private var showSettings = false
     
     var body: some View {
         ZStack {
@@ -39,9 +40,13 @@ struct CameraView: View {
                     
                     Spacer()
                     
-                    // Placeholder for balance
-                    Color.clear
-                        .frame(width: 30, height: 30)
+                    // Settings button
+                    Button(action: { showSettings = true }) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title2)
+                            .foregroundColor(Constants.Colors.primaryGold)
+                            .background(Circle().fill(Constants.Colors.pureWhite))
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
@@ -348,6 +353,9 @@ struct CameraView: View {
         }
         .sheet(isPresented: $viewModel.isAnalyzing) {
             AnalysisLoadingView()
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
         }
     }
 }
