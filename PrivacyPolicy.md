@@ -93,7 +93,7 @@ Your continued use of the app after any changes constitutes acceptance of the up
 
 If you have any questions about this Privacy Policy or our privacy practices, please contact us at:
 
-**Email:** [Your Contact Email]  
+**Email:** a.kenzhe.sam@gmail.com  
 **Developer:** Altynbek Kenzhe
 
 ## Additional Information
