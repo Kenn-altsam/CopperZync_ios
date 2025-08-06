@@ -57,6 +57,8 @@ enum NetworkError: Error, LocalizedError {
 
 protocol NetworkServiceProtocol {
     func analyzeCoin(image: UIImage) async throws -> CoinAnalysisResponse
+    func checkBackendHealth() async throws -> Bool
+    func testBackendConnection() async throws -> String
 }
 
 class NetworkService: NetworkServiceProtocol {
@@ -89,10 +91,98 @@ class NetworkService: NetworkServiceProtocol {
         self.session = URLSession(configuration: config)
     }
     
+    func checkBackendHealth() async throws -> Bool {
+        print("NetworkService: Checking backend health...")
+        
+        // Check network connectivity first
+        guard await checkNetworkConnectivity() else {
+            print("NetworkService: No internet connection available")
+            throw NetworkError.noInternetConnection
+        }
+        
+        guard let url = URL(string: baseURL + "/health") else {
+            print("NetworkService: Invalid health check URL")
+            throw NetworkError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 30.0
+        
+        do {
+            let (data, response) = try await session.data(for: request)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("NetworkService: Health check HTTP Status: \(httpResponse.statusCode)")
+                
+                if httpResponse.statusCode == 200 {
+                    if let responseString = String(data: data, encoding: .utf8) {
+                        print("NetworkService: Health check response: \(responseString)")
+                    }
+                    print("NetworkService: Backend is healthy and responding")
+                    return true
+                } else {
+                    print("NetworkService: Backend returned status code: \(httpResponse.statusCode)")
+                    throw NetworkError.serverError("Backend health check failed with status: \(httpResponse.statusCode)")
+                }
+            }
+            
+            throw NetworkError.serverError("Invalid response from backend")
+            
+        } catch {
+            print("NetworkService: Health check failed: \(error.localizedDescription)")
+            throw NetworkError.networkError(error)
+        }
+    }
+    
+    func testBackendConnection() async throws -> String {
+        print("NetworkService: Testing backend connection...")
+        
+        // Test 1: Check if base URL is reachable
+        guard let baseURL = URL(string: baseURL) else {
+            throw NetworkError.invalidURL
+        }
+        
+        var request = URLRequest(url: baseURL)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 10.0
+        
+        do {
+            let (_, response) = try await session.data(for: request)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("NetworkService: Base URL test - Status: \(httpResponse.statusCode)")
+                
+                if httpResponse.statusCode == 200 || httpResponse.statusCode == 404 {
+                    // 404 is expected if there's no root endpoint, but server is reachable
+                    return "Backend server is reachable (Status: \(httpResponse.statusCode))"
+                } else {
+                    return "Backend server responded with unexpected status: \(httpResponse.statusCode)"
+                }
+            }
+            
+            return "Backend server is reachable but returned invalid response"
+            
+        } catch {
+            print("NetworkService: Base URL test failed: \(error.localizedDescription)")
+            throw NetworkError.networkError(error)
+        }
+    }
+    
     func analyzeCoin(image: UIImage) async throws -> CoinAnalysisResponse {
         // Check network connectivity first
         guard await checkNetworkConnectivity() else {
             throw NetworkError.noInternetConnection
+        }
+        
+        // Optional: Check backend health before analysis
+        do {
+            let isHealthy = try await checkBackendHealth()
+            if !isHealthy {
+                throw NetworkError.serverError("Backend is not responding properly")
+            }
+        } catch {
+            print("NetworkService: Backend health check failed, proceeding with analysis anyway: \(error.localizedDescription)")
         }
         
         guard let url = URL(string: baseURL + analyzeEndpoint) else {
@@ -152,6 +242,13 @@ class NetworkService: NetworkServiceProtocol {
                 let decoder = JSONDecoder()
                 do {
                     let analysisResponse = try decoder.decode(CoinAnalysisResponse.self, from: data)
+                    
+                    // Check if the response contains all unknown values (indicates backend issue)
+                    if analysisResponse.coinAnalysis.isUnknownAnalysis {
+                        print("NetworkService: Backend returned all unknown values - this indicates a backend processing issue")
+                        throw NetworkError.serverError("Backend is not processing images properly. Please try again later.")
+                    }
+                    
                     print("NetworkService: Analysis completed successfully on attempt \(attempt + 1)")
                     return analysisResponse
                 } catch {
@@ -246,6 +343,12 @@ class NetworkService: NetworkServiceProtocol {
         guard let imageData = optimizedImage.jpegData(compressionQuality: 0.8) else {
             throw NetworkError.invalidImageData
         }
+        
+        // Log image details for debugging
+        print("NetworkService: Original image size: \(image.size)")
+        print("NetworkService: Optimized image size: \(optimizedImage.size)")
+        print("NetworkService: Image data size: \(imageData.count) bytes")
+        print("NetworkService: Image compression quality: 0.8")
         
         return imageData
     }

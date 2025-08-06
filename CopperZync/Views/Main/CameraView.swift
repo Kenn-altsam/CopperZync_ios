@@ -24,6 +24,14 @@ struct CameraView: View {
                     
                     Spacer()
                     
+                    // Test backend connection button (for debugging)
+                    Button(action: viewModel.testBackendConnection) {
+                        Image(systemName: "network")
+                            .font(.title2)
+                            .foregroundColor(Constants.Colors.primaryGold)
+                            .background(Circle().fill(Constants.Colors.pureWhite))
+                    }
+                    
                     Text(viewModel.showCapturedImage ? "Review Photo" : "Camera")
                         .font(.title2)
                         .fontWeight(.semibold)

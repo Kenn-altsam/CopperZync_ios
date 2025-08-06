@@ -24,9 +24,12 @@ class CameraViewModel: ObservableObject {
     
     let cameraService = CameraService()
     private let coinAnalysisService: CoinAnalysisServiceProtocol
+    private let networkService: NetworkServiceProtocol
     
-    init(coinAnalysisService: CoinAnalysisServiceProtocol = CoinAnalysisService()) {
+    init(coinAnalysisService: CoinAnalysisServiceProtocol = CoinAnalysisService(), 
+         networkService: NetworkServiceProtocol = NetworkService()) {
         self.coinAnalysisService = coinAnalysisService
+        self.networkService = networkService
         setupBindings()
         checkPhotoLibraryPermission()
     }
@@ -59,6 +62,16 @@ class CameraViewModel: ObservableObject {
         }
         
         print("CameraViewModel: Image captured successfully - Size: \(image.size)")
+        print("CameraViewModel: Image scale: \(image.scale)")
+        print("CameraViewModel: Image orientation: \(image.imageOrientation.rawValue)")
+        
+        // Log image quality metrics
+        if let cgImage = image.cgImage {
+            print("CameraViewModel: CGImage width: \(cgImage.width), height: \(cgImage.height)")
+            print("CameraViewModel: CGImage bits per component: \(cgImage.bitsPerComponent)")
+            print("CameraViewModel: CGImage bits per pixel: \(cgImage.bitsPerPixel)")
+            print("CameraViewModel: CGImage bytes per row: \(cgImage.bytesPerRow)")
+        }
         
         // Store the captured image and metadata
         capturedImage = image
@@ -188,6 +201,25 @@ class CameraViewModel: ObservableObject {
         showRetryAlert = false
         Task {
             await analyzeCoin(image: image)
+        }
+    }
+    
+    // MARK: - Backend Connection Testing
+    
+    func testBackendConnection() {
+        Task {
+            do {
+                let connectionStatus = try await networkService.testBackendConnection()
+                await MainActor.run {
+                    self.errorMessage = "Backend Test: \(connectionStatus)"
+                    self.showError = true
+                }
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = "Backend connection failed: \(error.localizedDescription)"
+                    self.showError = true
+                }
+            }
         }
     }
     

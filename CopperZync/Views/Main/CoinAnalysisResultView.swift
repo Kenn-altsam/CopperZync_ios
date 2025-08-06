@@ -11,20 +11,17 @@ struct CoinAnalysisResultView: View {
                 // Header
                 headerSection
                 
-                // Basic Info Card
-                basicInfoCard
-                
-                // Value Assessment Card
-                valueAssessmentCard
-                
-                // Description Card
-                descriptionCard
-                
-                // Historical Context Card
-                historicalContextCard
-                
-                // Technical Details Card
-                technicalDetailsCard
+                // Show special message for unknown analysis
+                if coinAnalysis.isUnknownAnalysis {
+                    unknownAnalysisSection
+                } else {
+                    // Regular analysis results
+                    basicInfoCard
+                    valueAssessmentCard
+                    descriptionCard
+                    historicalContextCard
+                    technicalDetailsCard
+                }
                 
                 // Action Buttons
                 actionButtons
@@ -38,21 +35,79 @@ struct CoinAnalysisResultView: View {
     
     private var headerSection: some View {
         VStack(spacing: 12) {
-            Image(systemName: "medal.fill")
+            Image(systemName: coinAnalysis.isUnknownAnalysis ? "questionmark.circle.fill" : "medal.fill")
                 .font(.system(size: 48))
                 .foregroundColor(Constants.Colors.primaryGold)
             
-            Text(Constants.Text.analysisCompleteTitle)
+            Text(coinAnalysis.isUnknownAnalysis ? "Analysis Complete" : Constants.Text.analysisCompleteTitle)
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .foregroundColor(Constants.Colors.textColor)
             
-            Text(Constants.Text.analysisCompleteSubtitle)
+            Text(coinAnalysis.isUnknownAnalysis ? "We've analyzed your coin" : Constants.Text.analysisCompleteSubtitle)
                 .font(.body)
                 .foregroundColor(Constants.Colors.textColor.opacity(0.8))
                 .multilineTextAlignment(.center)
         }
         .padding(.top, 20)
+    }
+    
+    private var unknownAnalysisSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            cardHeader(title: "Analysis Result", icon: "exclamationmark.triangle.fill")
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("We couldn't identify this coin")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(Constants.Colors.textColor)
+                
+                Text(coinAnalysis.unknownAnalysisMessage)
+                    .font(.body)
+                    .foregroundColor(Constants.Colors.textColor.opacity(0.8))
+                    .lineLimit(nil)
+                
+                // Tips for better photos
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Tips for better results:")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(Constants.Colors.textColor)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        tipRow("📸 Ensure good lighting")
+                        tipRow("🎯 Center the coin in frame")
+                        tipRow("🔍 Focus clearly on the coin")
+                        tipRow("📱 Hold camera steady")
+                        tipRow("✨ Clean the coin surface")
+                        tipRow("📏 Keep coin at least 2 inches from camera")
+                        tipRow("🌞 Use natural light when possible")
+                        tipRow("🔄 Try different angles if needed")
+                    }
+                }
+                .padding(.top, 8)
+                
+                // Additional guidance
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Common issues:")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(Constants.Colors.textColor)
+                        .padding(.top, 8)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        issueRow("Blurry or out-of-focus images")
+                        issueRow("Poor lighting or shadows")
+                        issueRow("Coin too small in frame")
+                        issueRow("Reflections or glare")
+                        issueRow("Dirty or worn coin surfaces")
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background(Constants.Colors.lightGold)
+        .cornerRadius(Constants.Layout.cardCornerRadius)
     }
     
     private var basicInfoCard: some View {
@@ -136,8 +191,8 @@ struct CoinAnalysisResultView: View {
         VStack(spacing: 16) {
             Button(action: onNewAnalysis) {
                 HStack {
-                    Image(systemName: "camera.fill")
-                    Text(Constants.Text.analyzeAnotherTitle)
+                    Image(systemName: coinAnalysis.isUnknownAnalysis ? "camera.fill" : "camera.fill")
+                    Text(coinAnalysis.isUnknownAnalysis ? "Try Again with Better Photo" : Constants.Text.analyzeAnotherTitle)
                 }
                 .font(.headline)
                 .foregroundColor(Constants.Colors.pureWhite)
@@ -192,6 +247,34 @@ struct CoinAnalysisResultView: View {
                 .fontWeight(.semibold)
                 .foregroundColor(Constants.Colors.textColor)
                 .multilineTextAlignment(.trailing)
+        }
+    }
+    
+    private func tipRow(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("•")
+                .font(.caption)
+                .foregroundColor(Constants.Colors.primaryGold)
+            
+            Text(text)
+                .font(.caption)
+                .foregroundColor(Constants.Colors.textColor.opacity(0.8))
+            
+            Spacer()
+        }
+    }
+    
+    private func issueRow(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("⚠️")
+                .font(.caption)
+                .foregroundColor(Constants.Colors.primaryGold)
+            
+            Text(text)
+                .font(.caption)
+                .foregroundColor(Constants.Colors.textColor.opacity(0.8))
+            
+            Spacer()
         }
     }
 }

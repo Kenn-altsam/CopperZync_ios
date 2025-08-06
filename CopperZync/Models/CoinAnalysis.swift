@@ -31,6 +31,31 @@ struct CoinAnalysis: Codable, Identifiable {
         case historicalContext = "historical_context"
         case technicalDetails = "technical_details"
     }
+    
+    // Computed property to check if the analysis returned unknown values
+    var isUnknownAnalysis: Bool {
+        let unknownValues = [
+            basicInfo.releasedYear,
+            basicInfo.country,
+            basicInfo.denomination,
+            basicInfo.composition,
+            valueAssessment.collectorValue,
+            valueAssessment.rarity,
+            description,
+            historicalContext,
+            technicalDetails.rarity
+        ]
+        
+        return unknownValues.allSatisfy { $0.lowercased() == "unknown" }
+    }
+    
+    // Computed property to get a user-friendly message for unknown analysis
+    var unknownAnalysisMessage: String {
+        if isUnknownAnalysis {
+            return "We couldn't identify this coin. This might be due to:\n\n• Poor lighting or image quality\n• Coin not clearly visible\n• Unusual or rare coin type\n• Image angle or focus issues\n\nTry taking a clearer photo with better lighting and ensuring the coin is centered and well-focused."
+        }
+        return ""
+    }
 }
 
 // MARK: - Basic Info
