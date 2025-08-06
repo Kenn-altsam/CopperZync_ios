@@ -39,6 +39,37 @@ struct Constants {
         static let photoSavedMessage = "Photo has been successfully saved to your photo library!"
         static let photoLibraryPermissionError = "Photo library access is required to save photos. Please enable it in Settings."
         static let photoLibrarySaveError = "Failed to save photo to library"
+        
+        // Coin Analysis
+        static let analyzingTitle = "Analyzing..."
+        static let identifyCoinTitle = "Identify Coin"
+        static let analysisErrorTitle = "Analysis Error"
+        static let noImageError = "No image available for analysis"
+        static let analyzingCoinTitle = "Analyzing Your Coin"
+        static let aiExaminingText = "Our AI is examining the details..."
+        static let mayTakeMomentText = "This may take up to 60 seconds"
+        static let internetConnectionText = "The server may need time to start up. Please be patient."
+        
+        // Analysis Results
+        static let analysisCompleteTitle = "Coin Analysis Complete"
+        static let analysisCompleteSubtitle = "Here's what we found about your coin"
+        static let basicInfoTitle = "Basic Information"
+        static let valueAssessmentTitle = "Value Assessment"
+        static let descriptionTitle = "Description"
+        static let historicalContextTitle = "Historical Context"
+        static let technicalDetailsTitle = "Technical Details"
+        static let analyzeAnotherTitle = "Analyze Another Coin"
+        static let backToCameraTitle = "Back to Camera"
+        
+        // Field Labels
+        static let yearLabel = "Year"
+        static let countryLabel = "Country"
+        static let denominationLabel = "Denomination"
+        static let compositionLabel = "Composition"
+        static let collectorValueLabel = "Collector Value"
+        static let rarityLabel = "Rarity"
+        static let mintMarkLabel = "Mint Mark"
+        static let diameterLabel = "Diameter"
     }
     
     // MARK: - Layout

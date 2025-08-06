@@ -9,11 +9,18 @@ class CameraService: NSObject, ObservableObject {
     @Published var capturedImage: UIImage?
     @Published var errorMessage: String?
     @Published var isPreviewReady = false
+    @Published var isAutoFocusing = false
+    @Published var focusDistance: Float = 0.0
     
     // Camera properties - using nonisolated(unsafe) for manual concurrency management
     nonisolated(unsafe) private var captureSession: AVCaptureSession?
     nonisolated(unsafe) private var photoOutput: AVCapturePhotoOutput?
+    nonisolated(unsafe) private var videoDeviceInput: AVCaptureDeviceInput?
     var videoPreviewLayer: AVCaptureVideoPreviewLayer?
+    
+    // Focus monitoring
+    private var focusTimer: Timer?
+    private let focusUpdateInterval: TimeInterval = 0.5
     
     // Public accessor for capture session
     var session: AVCaptureSession? {
@@ -60,6 +67,12 @@ class CameraService: NSObject, ObservableObject {
             return
         }
         
+        // Store the device input for focus control
+        videoDeviceInput = input
+        
+        // Configure camera for autofocus
+        configureCameraForAutofocus(device: backCamera)
+        
         photoOutput = AVCapturePhotoOutput()
         
         if captureSession?.canAddInput(input) == true {
@@ -68,6 +81,35 @@ class CameraService: NSObject, ObservableObject {
         
         if captureSession?.canAddOutput(photoOutput!) == true {
             captureSession?.addOutput(photoOutput!)
+        }
+    }
+    
+    private func configureCameraForAutofocus(device: AVCaptureDevice) {
+        do {
+            try device.lockForConfiguration()
+            
+            // Enable continuous autofocus
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+            
+            // Enable continuous auto exposure
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+            
+            // Enable auto white balance
+            if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                device.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+            
+            // Set focus point to center
+            device.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5)
+            device.exposurePointOfInterest = CGPoint(x: 0.5, y: 0.5)
+            
+            device.unlockForConfiguration()
+        } catch {
+            print("CameraService: Failed to configure camera for autofocus: \(error)")
         }
     }
     
@@ -82,6 +124,7 @@ class CameraService: NSObject, ObservableObject {
             self.captureSession?.startRunning()
             await MainActor.run {
                 self.isCameraActive = true
+                self.startFocusMonitoring()
             }
         }
     }
@@ -92,6 +135,7 @@ class CameraService: NSObject, ObservableObject {
             self.captureSession?.stopRunning()
             await MainActor.run {
                 self.isCameraActive = false
+                self.stopFocusMonitoring()
             }
         }
     }
@@ -110,6 +154,112 @@ class CameraService: NSObject, ObservableObject {
     
     func clearCapturedImage() {
         capturedImage = nil
+    }
+    
+    // MARK: - Focus Monitoring
+    
+    private func startFocusMonitoring() {
+        stopFocusMonitoring() // Stop any existing timer
+        
+        focusTimer = Timer.scheduledTimer(withTimeInterval: focusUpdateInterval, repeats: true) { [weak self] _ in
+            self?.updateFocusStatus()
+        }
+    }
+    
+    private func stopFocusMonitoring() {
+        focusTimer?.invalidate()
+        focusTimer = nil
+        isAutoFocusing = false
+    }
+    
+    private func updateFocusStatus() {
+        guard let device = videoDeviceInput?.device else { return }
+        
+        // Check if device is focusing
+        let isCurrentlyFocusing = device.isAdjustingFocus || device.isAdjustingExposure
+        
+        // Update focus distance (approximate based on lens position)
+        let currentFocusDistance = device.lensPosition
+        
+        Task { @MainActor in
+            self.isAutoFocusing = isCurrentlyFocusing
+            self.focusDistance = currentFocusDistance
+            
+            // Trigger autofocus if object is close (lens position > 0.3 indicates closer focus)
+            if currentFocusDistance > 0.3 && !isCurrentlyFocusing {
+                self.triggerAutofocus()
+            }
+        }
+    }
+    
+    private func triggerAutofocus() {
+        guard let device = videoDeviceInput?.device else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            // Set focus mode to auto focus on a single point
+            if device.isFocusModeSupported(.autoFocus) {
+                device.focusMode = .autoFocus
+                
+                // Set focus point to center of the frame
+                device.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5)
+                
+                // After a brief delay, switch back to continuous autofocus
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    self?.resetToContinuousAutofocus()
+                }
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            print("CameraService: Failed to trigger autofocus: \(error)")
+        }
+    }
+    
+    private func resetToContinuousAutofocus() {
+        guard let device = videoDeviceInput?.device else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            print("CameraService: Failed to reset to continuous autofocus: \(error)")
+        }
+    }
+    
+    // MARK: - Manual Focus Control
+    
+    func focusAtPoint(_ point: CGPoint) {
+        guard let device = videoDeviceInput?.device else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            // Set focus point
+            if device.isFocusPointOfInterestSupported {
+                device.focusPointOfInterest = point
+            }
+            
+            // Set exposure point
+            if device.isExposurePointOfInterestSupported {
+                device.exposurePointOfInterest = point
+            }
+            
+            // Trigger autofocus
+            if device.isFocusModeSupported(.autoFocus) {
+                device.focusMode = .autoFocus
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            print("CameraService: Failed to focus at point: \(error)")
+        }
     }
 }
 
@@ -162,11 +312,37 @@ struct CameraPreviewView: UIViewRepresentable {
         
         cameraService.videoPreviewLayer = previewLayer
         
+        // Add tap gesture for focus
+        let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        view.addGestureRecognizer(tapGesture)
+        
         return view
     }
     
     func updateUIView(_ uiView: UIView, context: Context) {
         // Update if needed
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(cameraService: cameraService)
+    }
+    
+    class Coordinator: NSObject {
+        let cameraService: CameraService
+        
+        init(cameraService: CameraService) {
+            self.cameraService = cameraService
+        }
+        
+        @MainActor @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            let location = gesture.location(in: gesture.view)
+            
+            // Convert tap location to camera coordinates
+            if let previewLayer = cameraService.videoPreviewLayer {
+                let cameraPoint = previewLayer.captureDevicePointConverted(fromLayerPoint: location)
+                cameraService.focusAtPoint(cameraPoint)
+            }
+        }
     }
 } 
 

@@ -5,7 +5,6 @@ struct CameraView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel = CameraViewModel()
     @State private var showFullScreenPhoto = false
-    @State private var showCoinInfo = false
     
     var body: some View {
         ZStack {
@@ -89,11 +88,17 @@ struct CameraView: View {
                         // Action Buttons
                         VStack(spacing: 16) {
                             // Proceed with analysis button
-                            Button(action: { showCoinInfo = true }) {
+                            Button(action: viewModel.proceedWithAnalysis) {
                                 HStack {
-                                    Image(systemName: "magnifyingglass")
-                                        .font(.system(size: 18, weight: .medium))
-                                    Text("Identify Coin")
+                                    if viewModel.isAnalyzing {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: Constants.Colors.pureWhite))
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Image(systemName: "magnifyingglass")
+                                            .font(.system(size: 18, weight: .medium))
+                                    }
+                                    Text(viewModel.isAnalyzing ? Constants.Text.analyzingTitle : Constants.Text.identifyCoinTitle)
                                         .font(.headline)
                                         .fontWeight(.semibold)
                                 }
@@ -104,6 +109,7 @@ struct CameraView: View {
                                 .cornerRadius(Constants.Layout.cardCornerRadius)
                                 .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
                             }
+                            .disabled(viewModel.isAnalyzing)
                             
                             // Retake photo button
                             Button(action: viewModel.retakePhoto) {
@@ -159,16 +165,50 @@ struct CameraView: View {
                         CameraPreviewView(cameraService: viewModel.cameraService)
                             .ignoresSafeArea()
                         
+                        // Coin positioning overlay
+                        CoinPositioningOverlay()
+                        
+                        // Autofocus indicator
+                        if viewModel.cameraService.isAutoFocusing {
+                            VStack {
+                                Spacer()
+                                HStack {
+                                    Spacer()
+                                    VStack(spacing: 8) {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: Constants.Colors.primaryGold))
+                                            .scaleEffect(1.2)
+                                        Text("Focusing...")
+                                            .font(.caption)
+                                            .foregroundColor(Constants.Colors.pureWhite)
+                                            .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)
+                                    }
+                                    .padding(12)
+                                    .background(Color.black.opacity(0.6))
+                                    .cornerRadius(8)
+                                    .padding(.trailing, 20)
+                                }
+                                .padding(.bottom, 200)
+                            }
+                        }
+                        
                         // Camera controls overlay
                         VStack {
                             Spacer()
                             
                             VStack(spacing: 20) {
                                 // Camera instructions
-                                Text("Position the coin in the center")
-                                    .font(.headline)
-                                    .foregroundColor(Constants.Colors.pureWhite)
-                                    .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
+                                VStack(spacing: 8) {
+                                    Text("Position the coin inside the circle")
+                                        .font(.headline)
+                                        .foregroundColor(Constants.Colors.pureWhite)
+                                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
+                                    
+                                    Text("Tap anywhere to focus • Auto-focus when close")
+                                        .font(.caption)
+                                        .foregroundColor(Constants.Colors.pureWhite.opacity(0.8))
+                                        .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)
+                                }
                                 
                                 // Capture button
                                 Button(action: viewModel.capturePhoto) {
@@ -268,12 +308,38 @@ struct CameraView: View {
         } message: {
             Text(Constants.Text.photoSavedMessage)
         }
+        .alert("Server Timeout", isPresented: $viewModel.showRetryAlert) {
+            Button("Try Again") {
+                viewModel.retryAnalysis()
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.showRetryAlert = false
+            }
+        } message: {
+            Text(viewModel.errorMessage ?? "The server is taking longer than expected to respond. This is normal for the first request.")
+        }
         .fullScreenCover(isPresented: $showFullScreenPhoto) {
             // Full Screen Photo View
             FullScreenPhotoView(image: viewModel.capturedImage, dismiss: { showFullScreenPhoto = false })
         }
-        .sheet(isPresented: $showCoinInfo) {
-            CoinInfoView()
+        .sheet(isPresented: $viewModel.showAnalysisResult) {
+            if let coinAnalysis = viewModel.coinAnalysis {
+                CoinAnalysisResultView(
+                    coinAnalysis: coinAnalysis,
+                    onBack: {
+                        viewModel.showAnalysisResult = false
+                        viewModel.coinAnalysis = nil
+                    },
+                    onNewAnalysis: {
+                        viewModel.showAnalysisResult = false
+                        viewModel.coinAnalysis = nil
+                        viewModel.retakePhoto()
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $viewModel.isAnalyzing) {
+            AnalysisLoadingView()
         }
     }
 }

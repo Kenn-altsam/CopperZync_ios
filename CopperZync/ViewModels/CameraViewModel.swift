@@ -16,9 +16,17 @@ class CameraViewModel: ObservableObject {
     @Published var isSavingToLibrary = false
     @Published var showSaveSuccess = false
     
-    let cameraService = CameraService()
+    // Coin Analysis Properties
+    @Published var coinAnalysis: CoinAnalysis?
+    @Published var isAnalyzing = false
+    @Published var showAnalysisResult = false
+    @Published var showRetryAlert = false
     
-    init() {
+    let cameraService = CameraService()
+    private let coinAnalysisService: CoinAnalysisServiceProtocol
+    
+    init(coinAnalysisService: CoinAnalysisServiceProtocol = CoinAnalysisService()) {
+        self.coinAnalysisService = coinAnalysisService
         setupBindings()
         checkPhotoLibraryPermission()
     }
@@ -110,9 +118,56 @@ class CameraViewModel: ObservableObject {
     }
     
     func proceedWithAnalysis() {
-        // This will be called when user wants to proceed with coin identification
-        // The captured image is already stored and ready for analysis
-        print("Proceeding with analysis for image captured at: \(photoCaptureTime?.description ?? "unknown")")
+        guard let image = capturedImage else {
+            errorMessage = Constants.Text.noImageError
+            showError = true
+            return
+        }
+        
+        Task {
+            await analyzeCoin(image: image)
+        }
+    }
+    
+    private func analyzeCoin(image: UIImage) async {
+        isAnalyzing = true
+        isLoading = true
+        
+        do {
+            let analysis = try await coinAnalysisService.analyzeCoin(image: image)
+            coinAnalysis = analysis
+            showAnalysisResult = true
+            print("Coin analysis completed successfully")
+        } catch {
+            // Check if it's a timeout error
+            if let networkError = error as? NetworkError {
+                switch networkError {
+                case .networkError(let underlyingError):
+                    if let nsError = underlyingError as NSError? {
+                        if nsError.code == NSURLErrorTimedOut {
+                            errorMessage = "The server is taking longer than expected to respond. This is normal for the first request. Would you like to try again?"
+                            showRetryAlert = true
+                        } else {
+                            errorMessage = networkError.localizedDescription
+                            showError = true
+                        }
+                    } else {
+                        errorMessage = networkError.localizedDescription
+                        showError = true
+                    }
+                default:
+                    errorMessage = networkError.localizedDescription
+                    showError = true
+                }
+            } else {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+            print("Coin analysis failed: \(error.localizedDescription)")
+        }
+        
+        isAnalyzing = false
+        isLoading = false
     }
     
     func requestCameraPermission() {
@@ -126,6 +181,14 @@ class CameraViewModel: ObservableObject {
     
     func dismissSaveSuccess() {
         showSaveSuccess = false
+    }
+    
+    func retryAnalysis() {
+        guard let image = capturedImage else { return }
+        showRetryAlert = false
+        Task {
+            await analyzeCoin(image: image)
+        }
     }
     
     // MARK: - Photo Library Permission and Management
