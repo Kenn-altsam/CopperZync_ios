@@ -58,7 +58,7 @@ struct CoinAnalysis: Codable, Identifiable {
             valueAssessment.rarity,
             description,
             historicalContext,
-            technicalDetails.composition
+            technicalDetails.composition ?? "unknown"
         ]
         
         return unknownValues.allSatisfy { $0.lowercased() == "unknown" }
@@ -102,7 +102,7 @@ struct ValueAssessment: Codable {
 // MARK: - Technical Details
 struct TechnicalDetails: Codable {
     let mintMark: String?
-    let composition: String
+    let composition: String?
     let diameterMm: String?
     
     enum CodingKeys: String, CodingKey {

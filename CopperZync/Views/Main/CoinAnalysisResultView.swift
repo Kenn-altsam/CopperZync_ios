@@ -294,12 +294,12 @@ struct CoinAnalysisResultView: View {
         historicalContext: "Introduced to commemorate the 200th anniversary of George Washington's birth.",
         technicalDetails: TechnicalDetails(
             mintMark: "P",
-            rarity: "common",
+            composition: "91.67% copper, 8.33% nickel",
             diameterMm: "24.26"
         )
     )
     
-    return CoinAnalysisResultView(
+    CoinAnalysisResultView(
         coinAnalysis: sampleAnalysis,
         onBack: {},
         onNewAnalysis: {}

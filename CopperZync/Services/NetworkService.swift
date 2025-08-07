@@ -238,7 +238,7 @@ class NetworkService: NetworkServiceProtocol {
                     // Debug: Log successful decoding
                     print("NetworkService: Successfully decoded response")
                     print("NetworkService: Basic Info - Year: \(analysisResponse.coinAnalysis.basicInfo.releasedYear), Country: \(analysisResponse.coinAnalysis.basicInfo.country)")
-                    print("NetworkService: Technical Details - Mint Mark: \(analysisResponse.coinAnalysis.technicalDetails.mintMark ?? "None"), Composition: \(analysisResponse.coinAnalysis.technicalDetails.composition)")
+                    print("NetworkService: Technical Details - Mint Mark: \(analysisResponse.coinAnalysis.technicalDetails.mintMark ?? "None"), Composition: \(analysisResponse.coinAnalysis.technicalDetails.composition ?? "None")")
                     print("NetworkService: Metadata - Model: \(analysisResponse.metadata.modelUsed), Image Size: \(analysisResponse.metadata.imageSizeBytes)")
                     
                     // Check if the response contains all unknown values (indicates backend issue)
