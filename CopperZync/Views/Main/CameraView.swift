@@ -125,23 +125,6 @@ struct CameraView: View {
                             }
                             .disabled(viewModel.isAnalyzing)
                             
-                            // Retake photo button
-                            Button(action: viewModel.retakePhoto) {
-                                HStack {
-                                    Image(systemName: "arrow.clockwise")
-                                        .font(.system(size: 18, weight: .medium))
-                                    Text("Retake Photo")
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
-                                }
-                                .foregroundColor(Constants.Colors.primaryGold)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 56)
-                                .background(Constants.Colors.pureWhite)
-                                .cornerRadius(Constants.Layout.cardCornerRadius)
-                                .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
-                            }
-                            
                             // Load from Photos button
                             PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
                                 HStack {
@@ -362,7 +345,6 @@ struct CameraView: View {
                     onNewAnalysis: {
                         viewModel.showAnalysisResult = false
                         viewModel.coinAnalysis = nil
-                        viewModel.retakePhoto()
                     }
                 )
             }

@@ -116,20 +116,7 @@ class CameraViewModel: ObservableObject {
         cameraService.clearCapturedImage()
     }
     
-    func retakePhoto() {
-        print("CameraViewModel: Retake photo requested")
-        // Clear the captured image state first
-        clearCapturedImage()
-        
-        // Ensure camera is stopped before restarting
-        stopCamera()
-        
-        // Longer delay to ensure proper state transition and camera restart
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            print("CameraViewModel: Restarting camera after retake")
-            self.startCamera()
-        }
-    }
+
     
     func proceedWithAnalysis() {
         guard let image = capturedImage else {
