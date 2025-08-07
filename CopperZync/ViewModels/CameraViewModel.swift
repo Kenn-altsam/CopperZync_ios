@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import Photos
+import PhotosUI
 import Combine
 
 @MainActor
@@ -12,9 +13,10 @@ class CameraViewModel: ObservableObject {
     @Published var showError = false
     @Published var showCapturedImage = false
     @Published var photoCaptureTime: Date?
-    @Published var photoLibraryPermissionStatus: PHAuthorizationStatus = .notDetermined
-    @Published var isSavingToLibrary = false
-    @Published var showSaveSuccess = false
+    
+    // Photo Picker Properties
+    @Published var showPhotoPicker = false
+    @Published var selectedPhotoItem: PhotosPickerItem?
     
     // Coin Analysis Properties
     @Published var coinAnalysis: CoinAnalysis?
@@ -31,7 +33,6 @@ class CameraViewModel: ObservableObject {
         self.coinAnalysisService = coinAnalysisService
         self.networkService = networkService
         setupBindings()
-        checkPhotoLibraryPermission()
     }
     
     private func setupBindings() {
@@ -192,10 +193,6 @@ class CameraViewModel: ObservableObject {
         errorMessage = nil
     }
     
-    func dismissSaveSuccess() {
-        showSaveSuccess = false
-    }
-    
     func retryAnalysis() {
         guard let image = capturedImage else { return }
         showRetryAlert = false
@@ -223,59 +220,38 @@ class CameraViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Photo Library Permission and Management
+
     
-    func checkPhotoLibraryPermission() {
-        photoLibraryPermissionStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+    // MARK: - Photo Picker Management
+    
+    func selectPhotoFromLibrary() {
+        showPhotoPicker = true
     }
     
-    func requestPhotoLibraryPermission() {
-        PHPhotoLibrary.requestAuthorization(for: .readWrite) { [weak self] status in
-            DispatchQueue.main.async {
-                self?.photoLibraryPermissionStatus = status
-                if status == .authorized || status == .limited {
-                    self?.savePhotoToLibrary()
+    func handleSelectedPhoto(_ item: PhotosPickerItem) {
+        selectedPhotoItem = item
+        
+        Task {
+            do {
+                if let data = try await item.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    await MainActor.run {
+                        self.capturedImage = image
+                        self.photoCaptureTime = Date()
+                        self.showCapturedImage = true
+                        self.stopCamera()
+                        print("Photo selected from library successfully")
+                    }
                 } else {
-                    self?.errorMessage = Constants.Text.photoLibraryPermissionError
-                    self?.showError = true
+                    await MainActor.run {
+                        self.errorMessage = "Failed to load the selected photo"
+                        self.showError = true
+                    }
                 }
-            }
-        }
-    }
-    
-    func savePhotoToLibrary() {
-        guard let image = capturedImage else { return }
-        
-        // Check permission first
-        switch photoLibraryPermissionStatus {
-        case .authorized, .limited:
-            performSaveToLibrary(image: image)
-        case .denied, .restricted:
-            errorMessage = Constants.Text.photoLibraryPermissionError
-            showError = true
-        case .notDetermined:
-            requestPhotoLibraryPermission()
-        @unknown default:
-            errorMessage = Constants.Text.photoLibrarySaveError
-            showError = true
-        }
-    }
-    
-    private func performSaveToLibrary(image: UIImage) {
-        isSavingToLibrary = true
-        
-        PHPhotoLibrary.shared().performChanges({
-            PHAssetChangeRequest.creationRequestForAsset(from: image)
-        }) { [weak self] success, error in
-            DispatchQueue.main.async {
-                self?.isSavingToLibrary = false
-                
-                if success {
-                    self?.showSaveSuccess = true
-                    print("Photo saved to library successfully")
-                } else {
-                    self?.errorMessage = "\(Constants.Text.photoLibrarySaveError): \(error?.localizedDescription ?? "Unknown error")"
-                    self?.showError = true
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = "Error loading photo: \(error.localizedDescription)"
+                    self.showError = true
                 }
             }
         }

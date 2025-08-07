@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import PhotosUI
 
 struct CameraView: View {
     @Environment(\.dismiss) private var dismiss
@@ -141,18 +142,12 @@ struct CameraView: View {
                                 .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
                             }
                             
-                            // Save to library button
-                            Button(action: viewModel.savePhotoToLibrary) {
+                            // Load from Photos button
+                            PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
                                 HStack {
-                                    if viewModel.isSavingToLibrary {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: Constants.Colors.darkGold))
-                                            .scaleEffect(0.8)
-                                    } else {
-                                        Image(systemName: "photo.on.rectangle.angled")
-                                            .font(.system(size: 18, weight: .medium))
-                                    }
-                                    Text(viewModel.isSavingToLibrary ? Constants.Text.savingToLibraryTitle : Constants.Text.saveToLibraryTitle)
+                                    Image(systemName: "photo.on.rectangle")
+                                        .font(.system(size: 18, weight: .medium))
+                                    Text(Constants.Text.loadFromPhotosTitle)
                                         .font(.headline)
                                         .fontWeight(.semibold)
                                 }
@@ -163,7 +158,11 @@ struct CameraView: View {
                                 .cornerRadius(Constants.Layout.cardCornerRadius)
                                 .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
                             }
-                            .disabled(viewModel.isSavingToLibrary)
+                            .onChange(of: viewModel.selectedPhotoItem) { newItem in
+                                if let item = newItem {
+                                    viewModel.handleSelectedPhoto(item)
+                                }
+                            }
                         }
                         .padding(.horizontal, 20)
                         
@@ -267,32 +266,56 @@ struct CameraView: View {
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
                         
-                        Text("Tap the button below to start the camera")
+                        Text("Take a new photo or select from your library")
                             .font(.body)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
 
-                        Text("The camera will start in 10 seconds...")
+                        Text("Choose how you'd like to analyze your coin")
                             .font(.title3)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
                         
-                        Button(action: viewModel.startCamera) {
-                            HStack {
-                                Image(systemName: "camera.fill")
-                                    .font(.system(size: 18, weight: .medium))
-                                Text("Start Camera")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
+                        VStack(spacing: 16) {
+                            Button(action: viewModel.startCamera) {
+                                HStack {
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 18, weight: .medium))
+                                    Text("Start Camera")
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                }
+                                .foregroundColor(Constants.Colors.pureWhite)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 56)
+                                .background(Constants.Colors.primaryGold)
+                                .cornerRadius(Constants.Layout.cardCornerRadius)
+                                .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
                             }
-                            .foregroundColor(Constants.Colors.pureWhite)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 56)
-                            .background(Constants.Colors.primaryGold)
-                            .cornerRadius(Constants.Layout.cardCornerRadius)
-                            .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+                            
+                            // Load from Photos button in camera setup mode
+                            PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
+                                HStack {
+                                    Image(systemName: "photo.on.rectangle")
+                                        .font(.system(size: 18, weight: .medium))
+                                    Text(Constants.Text.loadFromPhotosTitle)
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                }
+                                .foregroundColor(Constants.Colors.darkGold)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 56)
+                                .background(Constants.Colors.lightGold)
+                                .cornerRadius(Constants.Layout.cardCornerRadius)
+                                .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+                            }
+                            .onChange(of: viewModel.selectedPhotoItem) { newItem in
+                                if let item = newItem {
+                                    viewModel.handleSelectedPhoto(item)
+                                }
+                            }
                         }
                         .padding(.horizontal, 20)
                         
@@ -313,13 +336,6 @@ struct CameraView: View {
             }
         } message: {
             Text(viewModel.errorMessage ?? "Unknown error occurred")
-        }
-        .alert(Constants.Text.photoSavedTitle, isPresented: $viewModel.showSaveSuccess) {
-            Button("OK") {
-                viewModel.dismissSaveSuccess()
-            }
-        } message: {
-            Text(Constants.Text.photoSavedMessage)
         }
         .alert("Server Timeout", isPresented: $viewModel.showRetryAlert) {
             Button("Try Again") {

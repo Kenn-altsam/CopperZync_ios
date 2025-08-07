@@ -39,6 +39,7 @@ struct Constants {
         static let photoSavedMessage = "Photo has been successfully saved to your photo library!"
         static let photoLibraryPermissionError = "Photo library access is required to save photos. Please enable it in Settings."
         static let photoLibrarySaveError = "Failed to save photo to library"
+        static let loadFromPhotosTitle = "Load from Photos"
         
         // Coin Analysis
         static let analyzingTitle = "Analyzing..."
@@ -62,7 +63,7 @@ struct Constants {
         static let backToCameraTitle = "Back to Camera"
         
         // Field Labels
-        static let yearLabel = "Year"
+        static let yearLabel = "First Released Year"
         static let countryLabel = "Country"
         static let denominationLabel = "Denomination"
         static let compositionLabel = "Composition"
