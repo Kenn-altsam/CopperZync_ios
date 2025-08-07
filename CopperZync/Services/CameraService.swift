@@ -56,32 +56,52 @@ class CameraService: NSObject, ObservableObject {
     }
     
     private func setupCamera() {
-        guard isCameraAuthorized else { return }
+        print("CameraService: Setting up camera")
+        guard isCameraAuthorized else { 
+            print("CameraService: Camera not authorized during setup")
+            return 
+        }
         
+        print("CameraService: Creating capture session")
         captureSession = AVCaptureSession()
         captureSession?.sessionPreset = .photo
         
+        print("CameraService: Getting back camera device")
         guard let backCamera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
               let input = try? AVCaptureDeviceInput(device: backCamera) else {
+            print("CameraService: Failed to get back camera or create input")
             errorMessage = "Unable to access camera"
             return
         }
         
+        print("CameraService: Storing device input")
         // Store the device input for focus control
         videoDeviceInput = input
         
+        print("CameraService: Configuring camera for autofocus")
         // Configure camera for autofocus
         configureCameraForAutofocus(device: backCamera)
         
+        print("CameraService: Creating photo output")
         photoOutput = AVCapturePhotoOutput()
         
+        print("CameraService: Adding input to session")
         if captureSession?.canAddInput(input) == true {
             captureSession?.addInput(input)
+            print("CameraService: Input added successfully")
+        } else {
+            print("CameraService: Failed to add input to session")
         }
         
+        print("CameraService: Adding output to session")
         if captureSession?.canAddOutput(photoOutput!) == true {
             captureSession?.addOutput(photoOutput!)
+            print("CameraService: Output added successfully")
+        } else {
+            print("CameraService: Failed to add output to session")
         }
+        
+        print("CameraService: Camera setup complete")
     }
     
     private func configureCameraForAutofocus(device: AVCaptureDevice) {
@@ -114,17 +134,28 @@ class CameraService: NSObject, ObservableObject {
     }
     
     func startCamera() {
+        print("CameraService: 🚀 startCamera() called")
+        print("CameraService: isCameraAuthorized: \(isCameraAuthorized)")
+        
         guard isCameraAuthorized else {
+            print("CameraService: Camera not authorized, checking permission")
             checkCameraPermission()
             return
         }
         
+        print("CameraService: Starting camera session")
         Task.detached { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else { 
+                print("CameraService: Self is nil in Task.detached")
+                return 
+            }
+            print("CameraService: Starting capture session")
             self.captureSession?.startRunning()
             await MainActor.run {
+                print("CameraService: Setting isCameraActive = true")
                 self.isCameraActive = true
                 self.startFocusMonitoring()
+                print("CameraService: Camera started successfully")
             }
         }
     }

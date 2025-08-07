@@ -1,5 +1,20 @@
 import Foundation
 
+// MARK: - Coin Images Model
+struct CoinImages: Codable {
+    let frontImage: Data
+    let backImage: Data
+    let frontImageFilename: String
+    let backImageFilename: String
+    
+    enum CodingKeys: String, CodingKey {
+        case frontImage = "front_image"
+        case backImage = "back_image"
+        case frontImageFilename = "front_image_filename"
+        case backImageFilename = "back_image_filename"
+    }
+}
+
 // MARK: - Main Response
 struct CoinAnalysisResponse: Codable {
     let success: Bool
@@ -43,7 +58,7 @@ struct CoinAnalysis: Codable, Identifiable {
             valueAssessment.rarity,
             description,
             historicalContext,
-            technicalDetails.rarity
+            technicalDetails.composition
         ]
         
         return unknownValues.allSatisfy { $0.lowercased() == "unknown" }
@@ -87,12 +102,12 @@ struct ValueAssessment: Codable {
 // MARK: - Technical Details
 struct TechnicalDetails: Codable {
     let mintMark: String?
-    let rarity: String
+    let composition: String
     let diameterMm: String?
     
     enum CodingKeys: String, CodingKey {
         case mintMark = "mint_mark"
-        case rarity
+        case composition
         case diameterMm = "diameter_mm"
     }
     
@@ -122,7 +137,7 @@ struct TechnicalDetails: Codable {
 struct AnalysisMetadata: Codable {
     let modelUsed: String
     let imageFilename: String
-    let imageSizeBytes: Int
+    let imageSizeBytes: String // Changed to String to handle "unknown" values
     let processingTime: String
     
     enum CodingKeys: String, CodingKey {
@@ -130,6 +145,29 @@ struct AnalysisMetadata: Codable {
         case imageFilename = "image_filename"
         case imageSizeBytes = "image_size_bytes"
         case processingTime = "processing_time"
+    }
+    
+    // Computed property to get formatted image size
+    var formattedImageSize: String {
+        if imageSizeBytes.lowercased() == "unknown" {
+            return "Unknown"
+        }
+        
+        // Try to convert to Int for formatting
+        if let sizeBytes = Int(imageSizeBytes) {
+            let formatter = ByteCountFormatter()
+            formatter.allowedUnits = [.useKB, .useMB]
+            formatter.countStyle = .file
+            return formatter.string(fromByteCount: Int64(sizeBytes))
+        }
+        
+        // Return as-is if it's not a number
+        return imageSizeBytes
+    }
+    
+    // Computed property to check if image size is available
+    var hasImageSize: Bool {
+        return imageSizeBytes.lowercased() != "unknown" && !imageSizeBytes.isEmpty
     }
 }
 

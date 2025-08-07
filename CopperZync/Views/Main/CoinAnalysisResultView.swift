@@ -176,7 +176,6 @@ struct CoinAnalysisResultView: View {
                 if let mintMark = coinAnalysis.technicalDetails.mintMark {
                     infoRow(label: Constants.Text.mintMarkLabel, value: mintMark)
                 }
-                infoRow(label: Constants.Text.rarityLabel, value: coinAnalysis.technicalDetails.rarity.capitalized)
                 if coinAnalysis.technicalDetails.hasDiameter {
                     infoRow(label: Constants.Text.diameterLabel, value: coinAnalysis.technicalDetails.formattedDiameter)
                 }

@@ -57,6 +57,7 @@ enum NetworkError: Error, LocalizedError {
 
 protocol NetworkServiceProtocol {
     func analyzeCoin(image: UIImage) async throws -> CoinAnalysisResponse
+    func analyzeCoinWithBothSides(frontImage: UIImage, backImage: UIImage) async throws -> CoinAnalysisResponse
     func checkBackendHealth() async throws -> Bool
     func testBackendConnection() async throws -> String
 }
@@ -68,18 +69,18 @@ class NetworkService: NetworkServiceProtocol {
     private let session: URLSession
     
     init(session: URLSession = .shared) {
-        // Configure URLSession for better network handling
+        // Configure URLSession for optimized performance
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 60.0
-        config.timeoutIntervalForResource = 120.0
-        config.waitsForConnectivity = true
+        config.timeoutIntervalForRequest = 30.0  // Reduced from 60s to 30s
+        config.timeoutIntervalForResource = 45.0 // Reduced from 120s to 45s
+        config.waitsForConnectivity = false      // Don't wait for connectivity
         config.allowsCellularAccess = true
         config.allowsExpensiveNetworkAccess = true
         config.allowsConstrainedNetworkAccess = true
         
-        // Additional network configuration for better reliability
-        config.httpMaximumConnectionsPerHost = 1
-        config.httpShouldUsePipelining = false
+        // Optimized network configuration for speed
+        config.httpMaximumConnectionsPerHost = 2  // Increased for better throughput
+        config.httpShouldUsePipelining = true     // Enable pipelining for speed
         config.httpShouldSetCookies = false
         config.httpCookieAcceptPolicy = .never
         config.httpCookieStorage = nil
@@ -170,21 +171,6 @@ class NetworkService: NetworkServiceProtocol {
     }
     
     func analyzeCoin(image: UIImage) async throws -> CoinAnalysisResponse {
-        // Check network connectivity first
-        guard await checkNetworkConnectivity() else {
-            throw NetworkError.noInternetConnection
-        }
-        
-        // Optional: Check backend health before analysis
-        do {
-            let isHealthy = try await checkBackendHealth()
-            if !isHealthy {
-                throw NetworkError.serverError("Backend is not responding properly")
-            }
-        } catch {
-            print("NetworkService: Backend health check failed, proceeding with analysis anyway: \(error.localizedDescription)")
-        }
-        
         guard let url = URL(string: baseURL + analyzeEndpoint) else {
             throw NetworkError.invalidURL
         }
@@ -195,20 +181,215 @@ class NetworkService: NetworkServiceProtocol {
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         
-        // Set longer timeout for Render's cold start
-        request.timeoutInterval = 60.0 // 60 seconds timeout
+        // Optimized timeout for faster response
+        request.timeoutInterval = 30.0 // Reduced from 60s to 30s
         
         // Create the multipart form data
         let imageData = try await prepareImageData(image)
         let body = createMultipartFormData(imageData: imageData, boundary: boundary)
         request.httpBody = body
         
-        // Retry logic for Render's cold start
-        let maxRetries = 2
+        // Simplified retry logic - only 1 retry attempt
+        let maxRetries = 1
         var lastError: Error?
+        
+        // Add timeout for the entire operation
+        let operationTimeout = Task {
+            try await Task.sleep(nanoseconds: 35_000_000_000) // 35 seconds total timeout
+            throw NetworkError.timeout
+        }
         
         for attempt in 0...maxRetries {
             print("NetworkService: Attempt \(attempt + 1) of \(maxRetries + 1)")
+            
+            do {
+                let (data, response) = try await session.data(for: request)
+                
+                // Check for HTTP errors
+                if let httpResponse = response as? HTTPURLResponse {
+                    if httpResponse.statusCode != 200 {
+                        // Try to parse error response
+                        if let errorResponse = try? JSONDecoder().decode(AnalysisErrorResponse.self, from: data) {
+                            throw NetworkError.serverError(errorResponse.error)
+                        } else {
+                            throw NetworkError.serverError("Server error: \(httpResponse.statusCode)")
+                        }
+                    }
+                }
+                
+                // Debug: Print response details
+                if let httpResponse = response as? HTTPURLResponse {
+                    print("NetworkService: HTTP Status: \(httpResponse.statusCode)")
+                    print("NetworkService: Response Headers: \(httpResponse.allHeaderFields)")
+                }
+                print("NetworkService: Response Data Size: \(data.count) bytes")
+                
+                // Try to print the first 500 characters of the response for debugging
+                if let responseString = String(data: data, encoding: .utf8) {
+                    let preview = String(responseString.prefix(500))
+                    print("NetworkService: Response Preview: \(preview)")
+                }
+                
+                // Decode the response
+                let decoder = JSONDecoder()
+                do {
+                    let analysisResponse = try decoder.decode(CoinAnalysisResponse.self, from: data)
+                    
+                    // Debug: Log successful decoding
+                    print("NetworkService: Successfully decoded response")
+                    print("NetworkService: Basic Info - Year: \(analysisResponse.coinAnalysis.basicInfo.releasedYear), Country: \(analysisResponse.coinAnalysis.basicInfo.country)")
+                    print("NetworkService: Technical Details - Mint Mark: \(analysisResponse.coinAnalysis.technicalDetails.mintMark ?? "None"), Composition: \(analysisResponse.coinAnalysis.technicalDetails.composition)")
+                    print("NetworkService: Metadata - Model: \(analysisResponse.metadata.modelUsed), Image Size: \(analysisResponse.metadata.imageSizeBytes)")
+                    
+                    // Check if the response contains all unknown values (indicates backend issue)
+                    if analysisResponse.coinAnalysis.isUnknownAnalysis {
+                        print("NetworkService: Backend returned all unknown values - this indicates a backend processing issue")
+                        throw NetworkError.serverError("Backend is not processing images properly. Please try again later.")
+                    }
+                    
+                    print("NetworkService: Analysis completed successfully on attempt \(attempt + 1)")
+                    return analysisResponse
+                } catch {
+                    // Try to decode as error response
+                    if let errorResponse = try? decoder.decode(AnalysisErrorResponse.self, from: data) {
+                        print("NetworkService: Server returned error: \(errorResponse.error)")
+                        throw NetworkError.serverError(errorResponse.error)
+                    }
+                    
+                    // Enhanced decoding error handling
+                    if let decodingError = error as? DecodingError {
+                        print("NetworkService: Decoding error: \(decodingError)")
+                        
+                        // Try to print the raw JSON for debugging
+                        if let responseString = String(data: data, encoding: .utf8) {
+                            print("NetworkService: Raw JSON response: \(responseString)")
+                        }
+                        
+                        // Provide more specific error messages
+                        switch decodingError {
+                        case .keyNotFound(let key, let context):
+                            print("NetworkService: Missing key '\(key)' at path: \(context.codingPath)")
+                            throw NetworkError.serverError("Invalid response format: missing field '\(key.stringValue)'")
+                        case .typeMismatch(let type, let context):
+                            print("NetworkService: Type mismatch for type '\(type)' at path: \(context.codingPath)")
+                            throw NetworkError.serverError("Invalid response format: type mismatch for field '\(context.codingPath.last?.stringValue ?? "unknown")'")
+                        case .valueNotFound(let type, let context):
+                            print("NetworkService: Value not found for type '\(type)' at path: \(context.codingPath)")
+                            throw NetworkError.serverError("Invalid response format: missing value for field '\(context.codingPath.last?.stringValue ?? "unknown")'")
+                        case .dataCorrupted(let context):
+                            print("NetworkService: Data corrupted at path: \(context.codingPath)")
+                            throw NetworkError.serverError("Invalid response format: corrupted data")
+                        @unknown default:
+                            print("NetworkService: Unknown decoding error")
+                            throw NetworkError.serverError("Invalid response format")
+                        }
+                    }
+                    
+                    // If it's not a valid error response either, throw the original error
+                    throw error
+                }
+                
+            } catch let error as NetworkError {
+                lastError = error
+                print("NetworkService: NetworkError on attempt \(attempt + 1): \(error.localizedDescription)")
+                if attempt < maxRetries {
+                    print("NetworkService: Retrying immediately...")
+                    // No delay for faster retry
+                    continue
+                }
+                throw error
+            } catch {
+                lastError = error
+                print("NetworkService: Error on attempt \(attempt + 1): \(error.localizedDescription)")
+                
+                // Check for specific network errors
+                if let nsError = error as NSError? {
+                    print("NetworkService: NSError code: \(nsError.code), domain: \(nsError.domain)")
+                    
+                    // Handle specific network errors
+                    switch nsError.code {
+                    case NSURLErrorCannotConnectToHost, NSURLErrorNetworkConnectionLost:
+                        print("NetworkService: Connection error detected")
+                        if attempt < maxRetries {
+                            print("NetworkService: Retrying connection immediately...")
+                            continue
+                        }
+                        throw NetworkError.connectionFailed
+                    case NSURLErrorNotConnectedToInternet:
+                        print("NetworkService: No internet connection")
+                        throw NetworkError.noInternetConnection
+                    case NSURLErrorTimedOut:
+                        print("NetworkService: Request timed out")
+                        if attempt < maxRetries {
+                            print("NetworkService: Retrying after timeout immediately...")
+                            continue
+                        }
+                        throw NetworkError.timeout
+                    default:
+                        // Check if it's a checksum or data corruption error
+                        if nsError.localizedDescription.contains("checksum") || 
+                           nsError.localizedDescription.contains("UDP") ||
+                           nsError.localizedDescription.contains("offload") {
+                            print("NetworkService: Checksum error detected")
+                            if attempt < maxRetries {
+                                print("NetworkService: Retrying after checksum error immediately...")
+                                continue
+                            }
+                            throw NetworkError.checksumError
+                        }
+                    }
+                }
+                
+                // Debug: Print the actual response data if it's a decoding error
+                if let decodingError = error as? DecodingError {
+                    print("NetworkService: Decoding error details: \(decodingError)")
+                }
+                
+                if attempt < maxRetries {
+                    print("NetworkService: Retrying immediately...")
+                    // No delay for faster retry
+                    continue
+                }
+                throw NetworkError.networkError(error)
+            }
+        }
+        
+        // If we get here, all retries failed
+        throw lastError ?? NetworkError.networkError(NSError(domain: "Unknown", code: -1))
+    }
+    
+    func analyzeCoinWithBothSides(frontImage: UIImage, backImage: UIImage) async throws -> CoinAnalysisResponse {
+        guard let url = URL(string: baseURL + analyzeEndpoint) else {
+            throw NetworkError.invalidURL
+        }
+        
+        // Prepare the multipart form data
+        let boundary = UUID().uuidString
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        // Optimized timeout for faster response
+        request.timeoutInterval = 30.0 // Reduced from 60s to 30s
+        
+        // Create the multipart form data with both images
+        let frontImageData = try await prepareImageData(frontImage)
+        let backImageData = try await prepareImageData(backImage)
+        let body = createMultipartFormDataWithBothSides(frontImageData: frontImageData, backImageData: backImageData, boundary: boundary)
+        request.httpBody = body
+        
+        // Simplified retry logic - only 1 retry attempt
+        let maxRetries = 1
+        var lastError: Error?
+        
+        // Add timeout for the entire operation
+        let operationTimeout = Task {
+            try await Task.sleep(nanoseconds: 35_000_000_000) // 35 seconds total timeout
+            throw NetworkError.timeout
+        }
+        
+        for attempt in 0...maxRetries {
+            print("NetworkService: Attempt \(attempt + 1) of \(maxRetries + 1) for both sides analysis")
             
             do {
                 let (data, response) = try await session.data(for: request)
@@ -249,7 +430,7 @@ class NetworkService: NetworkServiceProtocol {
                         throw NetworkError.serverError("Backend is not processing images properly. Please try again later.")
                     }
                     
-                    print("NetworkService: Analysis completed successfully on attempt \(attempt + 1)")
+                    print("NetworkService: Both sides analysis completed successfully on attempt \(attempt + 1)")
                     return analysisResponse
                 } catch {
                     // Try to decode as error response
@@ -337,10 +518,10 @@ class NetworkService: NetworkServiceProtocol {
     }
     
     private func prepareImageData(_ image: UIImage) async throws -> Data {
-        // Optimize image for upload
+        // Optimize image for upload with faster processing
         let optimizedImage = optimizeImageForUpload(image)
         
-        guard let imageData = optimizedImage.jpegData(compressionQuality: 0.8) else {
+        guard let imageData = optimizedImage.jpegData(compressionQuality: 0.7) else {
             throw NetworkError.invalidImageData
         }
         
@@ -348,13 +529,13 @@ class NetworkService: NetworkServiceProtocol {
         print("NetworkService: Original image size: \(image.size)")
         print("NetworkService: Optimized image size: \(optimizedImage.size)")
         print("NetworkService: Image data size: \(imageData.count) bytes")
-        print("NetworkService: Image compression quality: 0.8")
+        print("NetworkService: Image compression quality: 0.7 (optimized for speed)")
         
         return imageData
     }
     
     private func optimizeImageForUpload(_ image: UIImage) -> UIImage {
-        let maxDimension: CGFloat = 1024
+        let maxDimension: CGFloat = 800  // Reduced from 1024 for faster processing
         let size = image.size
         
         // If image is already small enough, return as is
@@ -366,8 +547,8 @@ class NetworkService: NetworkServiceProtocol {
         let scale = min(maxDimension / size.width, maxDimension / size.height)
         let newSize = CGSize(width: size.width * scale, height: size.height * scale)
         
-        // Create new image with optimized size
-        UIGraphicsBeginImageContextWithOptions(newSize, false, 1.0)
+        // Create new image with optimized size and faster rendering
+        UIGraphicsBeginImageContextWithOptions(newSize, false, 0.5) // Reduced scale factor for speed
         image.draw(in: CGRect(origin: .zero, size: newSize))
         let optimizedImage = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
@@ -391,43 +572,62 @@ class NetworkService: NetworkServiceProtocol {
         return body
     }
     
+    private func createMultipartFormDataWithBothSides(frontImageData: Data, backImageData: Data, boundary: String) -> Data {
+        var body = Data()
+        
+        // Add front image data
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"front_image\"; filename=\"coin_front.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(frontImageData)
+        body.append("\r\n".data(using: .utf8)!)
+        
+        // Add back image data
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"back_image\"; filename=\"coin_back.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(backImageData)
+        body.append("\r\n".data(using: .utf8)!)
+        
+        // Add closing boundary
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        return body
+    }
+    
     private func checkNetworkConnectivity() async -> Bool {
-        return await withCheckedContinuation { continuation in
+        return await withTaskGroup(of: Bool.self) { group in
             let monitor = NWPathMonitor()
             let queue = DispatchQueue(label: "NetworkMonitor")
-            let semaphore = DispatchSemaphore(value: 1)
-            var hasResumed = false
             
-            let pathUpdateHandler: @Sendable (NWPath) -> Void = { path in
-                let isConnected = path.status == .satisfied
-                monitor.cancel()
-                
-                semaphore.wait()
-                if !hasResumed {
-                    hasResumed = true
-                    semaphore.signal()
-                    continuation.resume(returning: isConnected)
-                } else {
-                    semaphore.signal()
+            // Add network check task
+            group.addTask {
+                await withCheckedContinuation { continuation in
+                    let pathUpdateHandler: @Sendable (NWPath) -> Void = { path in
+                        let isConnected = path.status == .satisfied
+                        monitor.cancel()
+                        continuation.resume(returning: isConnected)
+                    }
+                    
+                    monitor.pathUpdateHandler = pathUpdateHandler
+                    monitor.start(queue: queue)
                 }
             }
             
-            monitor.pathUpdateHandler = pathUpdateHandler
-            monitor.start(queue: queue)
-            
-            // Timeout after 3 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            // Add timeout task
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
                 monitor.cancel()
-                
-                semaphore.wait()
-                if !hasResumed {
-                    hasResumed = true
-                    semaphore.signal()
-                    continuation.resume(returning: false)
-                } else {
-                    semaphore.signal()
-                }
+                return false
             }
+            
+            // Return the first result (either network status or timeout)
+            for await result in group {
+                group.cancelAll()
+                return result
+            }
+            
+            return false
         }
     }
 } 

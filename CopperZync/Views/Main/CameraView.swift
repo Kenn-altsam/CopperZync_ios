@@ -34,7 +34,9 @@ struct CameraView: View {
                             .background(Circle().fill(Constants.Colors.pureWhite))
                     }
                     
-                    Text(viewModel.showCapturedImage ? "Review Photo" : "Camera")
+                    Text(viewModel.showBothSidesPreview ? "Review Both Sides" : 
+                         viewModel.currentCaptureSide == .back ? "Capture Back Side" : 
+                         viewModel.showCapturedImage ? "Review Photo" : "Camera")
                         .font(.title2)
                         .fontWeight(.semibold)
                         .foregroundColor(.primary)
@@ -54,8 +56,32 @@ struct CameraView: View {
                 .padding(.bottom, 20)
                 
                 // Main Content
-                if viewModel.showCapturedImage, let capturedImage = viewModel.capturedImage {
-                    // Photo Review Mode
+                if viewModel.showBothSidesPreview, let frontImage = viewModel.frontImage, let backImage = viewModel.backImage {
+                    // Both sides preview mode
+                    BothSidesPreviewView(
+                        frontImage: frontImage,
+                        backImage: backImage,
+                        onRetake: viewModel.resetCaptureState,
+                        onAnalyze: viewModel.proceedWithAnalysis,
+                        isAnalyzing: viewModel.isAnalyzing,
+                        onTapImage: { viewModel.showBothSidesPreview = true }
+                    )
+                    
+                } else if let frontImage = viewModel.frontImage, viewModel.currentCaptureSide == .back {
+                    // Single side preview (front captured, waiting for back)
+                    SingleSidePreviewView(
+                        capturedImage: frontImage,
+                        currentSide: .front,
+                        onContinue: viewModel.captureBackSide,
+                        onRetake: {
+                            viewModel.frontImage = nil
+                            viewModel.currentCaptureSide = .front
+                            viewModel.startCamera()
+                        }
+                    )
+                    
+                } else if viewModel.showCapturedImage, let capturedImage = viewModel.capturedImage {
+                    // Legacy single photo review mode
                     VStack(spacing: 24) {
                         // Captured Photo (smaller size)
                         VStack(spacing: 12) {
@@ -194,8 +220,13 @@ struct CameraView: View {
                             VStack(spacing: 20) {
                                 // Camera instructions
                                 VStack(spacing: 8) {
-                                    Text("Position the coin inside the circle")
+                                    Text("Capture \(viewModel.currentCaptureSide.displayName) Side")
                                         .font(.headline)
+                                        .foregroundColor(Constants.Colors.pureWhite)
+                                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
+                                    
+                                    Text("Position the coin inside the circle")
+                                        .font(.subheadline)
                                         .foregroundColor(Constants.Colors.pureWhite)
                                         .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
                                     
@@ -249,13 +280,13 @@ struct CameraView: View {
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
                         
-                        Text("Take a new photo or select from your library")
+                        Text("Capture both sides of your coin for better analysis")
                             .font(.body)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
 
-                        Text("Choose how you'd like to analyze your coin")
+                        Text("Take photos or select from your library")
                             .font(.title3)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -334,6 +365,16 @@ struct CameraView: View {
             // Full Screen Photo View
             FullScreenPhotoView(image: viewModel.capturedImage, dismiss: { showFullScreenPhoto = false })
         }
+        .fullScreenCover(isPresented: $viewModel.showBothSidesPreview) {
+            // Full Screen Both Sides View
+            if let frontImage = viewModel.frontImage, let backImage = viewModel.backImage {
+                FullScreenBothSidesView(
+                    frontImage: frontImage,
+                    backImage: backImage,
+                    dismiss: { viewModel.showBothSidesPreview = false }
+                )
+            }
+        }
         .sheet(isPresented: $viewModel.showAnalysisResult) {
             if let coinAnalysis = viewModel.coinAnalysis {
                 CoinAnalysisResultView(
@@ -350,7 +391,7 @@ struct CameraView: View {
             }
         }
         .sheet(isPresented: $viewModel.isAnalyzing) {
-            AnalysisLoadingView()
+            AnalysisLoadingView(progressText: viewModel.analysisProgress)
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
@@ -391,6 +432,73 @@ struct FullScreenPhotoView: View {
                     .padding(.top, 20)
                 }
                 Spacer()
+            }
+        }
+        .onTapGesture {
+            dismiss()
+        }
+    }
+}
+
+// MARK: - Full Screen Both Sides View
+struct FullScreenBothSidesView: View {
+    let frontImage: UIImage
+    let backImage: UIImage
+    let dismiss: () -> Void
+    @State private var selectedSide: CoinSide = .front
+    
+    var body: some View {
+        ZStack {
+            // Background
+            Color.black
+                .ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Header with side selector
+                HStack {
+                    Button(action: dismiss) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title)
+                            .foregroundColor(.white)
+                            .background(Circle().fill(Color.black.opacity(0.5)))
+                    }
+                    
+                    Spacer()
+                    
+                    // Side selector
+                    HStack(spacing: 20) {
+                        Button(action: { selectedSide = .front }) {
+                            Text("Front")
+                                .font(.headline)
+                                .foregroundColor(selectedSide == .front ? .white : .gray)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(selectedSide == .front ? Constants.Colors.primaryGold : Color.clear)
+                                .cornerRadius(20)
+                        }
+                        
+                        Button(action: { selectedSide = .back }) {
+                            Text("Back")
+                                .font(.headline)
+                                .foregroundColor(selectedSide == .back ? .white : .gray)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(selectedSide == .back ? Constants.Colors.primaryGold : Color.clear)
+                                .cornerRadius(20)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 20)
+                
+                // Image display
+                Image(uiImage: selectedSide == .front ? frontImage : backImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .ignoresSafeArea()
             }
         }
         .onTapGesture {

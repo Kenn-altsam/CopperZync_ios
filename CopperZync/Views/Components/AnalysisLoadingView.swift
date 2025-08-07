@@ -2,6 +2,11 @@ import SwiftUI
 
 struct AnalysisLoadingView: View {
     @State private var isAnimating = false
+    let progressText: String
+    
+    init(progressText: String = "Analyzing coin...") {
+        self.progressText = progressText
+    }
     
     var body: some View {
         VStack(spacing: 24) {
@@ -30,7 +35,7 @@ struct AnalysisLoadingView: View {
                     .fontWeight(.bold)
                     .foregroundColor(Constants.Colors.textColor)
                 
-                Text(Constants.Text.aiExaminingText)
+                Text(progressText)
                     .font(.body)
                     .foregroundColor(Constants.Colors.textColor.opacity(0.8))
                     .multilineTextAlignment(.center)
